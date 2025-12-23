@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Riel Store</title>
+
+<style>
+body{font-family:Arial;background:#f4f4f4;margin:0;padding:15px}
+.container{max-width:900px;margin:auto;background:#fff;padding:20px;border-radius:12px}
+.app{border:1px solid #ddd;padding:15px;border-radius:10px;margin-bottom:15px}
+.price{color:#e74c3c;font-weight:bold}
+.stock{font-size:14px}
+button{padding:8px 14px;border:none;border-radius:6px;cursor:pointer;margin:3px}
+.buy{background:#28a745;color:#fff}
+.admin{background:#333;color:#fff;padding:10px;border-radius:8px;margin-bottom:15px;display:none}
+input,textarea{width:100%;padding:8px;margin:6px 0}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6)}
+.modal-content{background:#fff;width:90%;max-width:400px;margin:15% auto;padding:20px;border-radius:12px;text-align:center}
+img{width:100%;max-width:250px}
+footer{text-align:center;margin-top:30px;font-size:14px}
+ul{padding-left:18px}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<!-- LOGIN ADMIN -->
+<div id="loginBox">
+  <h3>Login Admin</h3>
+  <input id="user" placeholder="Username">
+  <input id="pass" type="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- ADMIN PANEL -->
+<div class="admin" id="adminPanel">
+  <b>Mode Admin Aktif</b>
+  <button onclick="logout()">Logout</button>
+
+  <h4>Tambah Produk</h4>
+  <input id="pname" placeholder="Nama Produk">
+  <textarea id="pdesc" placeholder="Deskripsi"></textarea>
+  <input id="pprice" placeholder="Harga (Rp)">
+  <input id="pstock" type="number" placeholder="Stok">
+  <button onclick="addProduct()">Tambah Produk</button>
+
+  <h4>Barcode / QR Pembayaran</h4>
+  <input type="file" accept="image/*" onchange="changeQR(this)">
+
+  <h4>Kontak Bantuan</h4>
+  <input id="ig" placeholder="Instagram">
+  <input id="telp" placeholder="Nomor Telepon">
+  <button onclick="saveContact()">Simpan Kontak</button>
+
+  <h4>Daftar Pembeli</h4>
+  <ul id="buyers"></ul>
+</div>
+
+<h2>Toko Aplikasi Premium</h2>
+<div id="productList"></div>
+
+<footer id="contactInfo"></footer>
+</div>
+
+<!-- FORM PEMBELI -->
+<div class="modal" id="formModal">
+  <div class="modal-content">
+    <h3>Isi Data Pembeli</h3>
+    <input id="wa" placeholder="Nomor WhatsApp">
+    <input id="gmail" placeholder="Gmail">
+    <button onclick="goPay()">Lanjut Pembayaran</button>
+    <button onclick="closeForm()">Batal</button>
+  </div>
+</div>
+
+<!-- MODAL PEMBAYARAN (QR LANGSUNG) -->
+<div class="modal" id="payModal">
+  <div class="modal-content">
+    <h3>Scan QR Pembayaran</h3>
+    <img id="qrImage" alt="QR Pembayaran">
+    <button onclick="closePay()">Tutup</button>
+  </div>
+</div>
+
+<script>
+let admin = {user:"admin", pass:"12345"};
+let products = JSON.parse(localStorage.getItem("products")) || [];
+let buyers = JSON.parse(localStorage.getItem("buyers")) || [];
+let contact = JSON.parse(localStorage.getItem("contact")) || {ig:"-", telp:"-"};
+let qrCode = localStorage.getItem("qrCode") || "";
+let currentIndex = null;
+
+/* LOGIN */
+function login(){
+  if(user.value===admin.user && pass.value===admin.pass){
+    loginBox.style.display="none";
+    adminPanel.style.display="block";
+    render();
+  } else alert("Login salah!");
+}
+function logout(){location.reload();}
+
+/* RENDER */
+function render(){
+  productList.innerHTML="";
+  products.forEach((p,i)=>{
+    productList.innerHTML+=`
+    <div class="app">
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <p class="price">${p.price}</p>
+      <p class="stock">Stok: ${p.stock}</p>
+      <button class="buy" onclick="buy(${i})" ${p.stock<=0?"disabled":""}>
+        Beli Sekarang
+      </button>
+      ${adminPanel.style.display==="block"?`
+        <button onclick="products[${i}].stock++;save();render()">+ Stok</button>
+        <button onclick="delProduct(${i})">Hapus</button>
+      `:""}
+    </div>`;
+  });
+  buyersList();
+  footerRender();
+}
+
+/* PRODUK */
+function save(){localStorage.setItem("products",JSON.stringify(products));}
+function addProduct(){
+  products.push({name:pname.value,desc:pdesc.value,price:pprice.value,stock:+pstock.value});
+  save(); render();
+}
+function delProduct(i){products.splice(i,1); save(); render();}
+
+/* BELI */
+function buy(i){
+  currentIndex=i;
+  formModal.style.display="block";
+}
+function closeForm(){formModal.style.display="none";}
+
+/* FIX UTAMA DI SINI */
+function goPay(){
+  if(!wa.value || !gmail.value){
+    alert("Lengkapi data!");
+    return;
+  }
+
+  products[currentIndex].stock--;
+
+  buyers.push({
+    product: products[currentIndex].name,
+    wa: wa.value,
+    gmail: gmail.value
+  });
+
+  localStorage.setItem("buyers", JSON.stringify(buyers));
+  save();
+
+  alert("Ada pembeli baru!");
+
+  formModal.style.display="none";
+
+  if(!qrCode){
+    alert("Barcode belum diatur admin");
+    return;
+  }
+
+  document.getElementById("qrImage").src = qrCode;
+  payModal.style.display="block";
+
+  wa.value=""; gmail.value="";
+  render();
+}
+
+function closePay(){payModal.style.display="none";}
+
+/* ADMIN */
+function buyersList(){
+  buyersEl.innerHTML="";
+  buyers.forEach(b=>{
+    buyersEl.innerHTML+=`<li>${b.product} | ${b.wa} | ${b.gmail}</li>`;
+  });
+}
+
+function saveContact(){
+  contact={ig:ig.value,telp:telp.value};
+  localStorage.setItem("contact",JSON.stringify(contact));
+  footerRender();
+}
+function footerRender(){
+  contactInfo.innerHTML=`Butuh bantuan? IG: ${contact.ig} | Telp: ${contact.telp}`;
+}
+
+function changeQR(input){
+  const file=input.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(){
+    qrCode=reader.result;
+    localStorage.setItem("qrCode",qrCode);
+    alert("Barcode berhasil diubah!");
+  };
+  reader.readAsDataURL(file);
+}
+
+render();
+</script>
+</body>
+</html>
